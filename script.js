@@ -27,8 +27,7 @@ function init() {
     loadData();
     updateStats();
     renderHistory();
-    
-    // Set current hourly rate in settings
+    renderCalendar(); // Add this line
     hourlyRateInput.value = hourlyRate;
 }
 
@@ -147,20 +146,18 @@ function saveWorkSession() {
     const now = new Date();
     const today = now.toISOString().split('T')[0];
     
-    // Always create a new session when stopping the timer
     workSessions.push({
         date: today,
         duration: elapsedTime
     });
     
-    // Reset timer state
     elapsedTime = 0;
     timerDisplay.textContent = '00:00:00';
     
-    // Save data and update UI
     saveData();
     updateStats();
     renderHistory();
+    renderCalendar(); // Add this to update calendar highlights
 }
 
 function renderHistory() {
@@ -239,6 +236,149 @@ window.addEventListener('click', (event) => {
         settingsModal.style.display = 'none';
     }
 });
+
+// Calendar functionality
+const prevMonthBtn = document.getElementById('prev-month');
+const nextMonthBtn = document.getElementById('next-month');
+const currentMonthEl = document.getElementById('current-month');
+const calendarDays = document.getElementById('calendar-days');
+
+let currentDate = new Date();
+
+function renderCalendar() {
+  // Clear previous days
+  calendarDays.innerHTML = '';
+  
+  // Set month/year header
+  currentMonthEl.textContent = new Intl.DateTimeFormat('en-US', { 
+    month: 'long', 
+    year: 'numeric' 
+  }).format(currentDate);
+  
+  // Get first day of month and total days
+  const firstDay = new Date(
+    currentDate.getFullYear(), 
+    currentDate.getMonth(), 
+    1
+  ).getDay();
+  
+  const daysInMonth = new Date(
+    currentDate.getFullYear(), 
+    currentDate.getMonth() + 1, 
+    0
+  ).getDate();
+  
+  // Get today's date for highlighting
+  const today = new Date();
+  const isCurrentMonth = currentDate.getMonth() === today.getMonth() && 
+                        currentDate.getFullYear() === today.getFullYear();
+  
+  // Add empty cells for days before first day of month
+  for (let i = 0; i < firstDay; i++) {
+    const emptyDay = document.createElement('div');
+    calendarDays.appendChild(emptyDay);
+  }
+  
+  // Add days of month
+  for (let i = 1; i <= daysInMonth; i++) {
+    const day = document.createElement('div');
+    day.textContent = i;
+    
+    // Highlight today
+    if (isCurrentMonth && i === today.getDate()) {
+      day.classList.add('today');
+    }
+    
+    // Format date to match your work sessions (YYYY-MM-DD)
+    const workDate = `${currentDate.getFullYear()}-${(currentDate.getMonth()+1).toString().padStart(2, '0')}-${i.toString().padStart(2, '0')}`;
+    const dayWorkSessions = workSessions.filter(session => session.date === workDate);
+    
+    // Add work-day class if there are sessions
+    if (dayWorkSessions.length > 0) {
+      day.classList.add('work-day');
+    }
+    
+    // Add click handler to ALL days (not just work days)
+    day.addEventListener('click', () => {
+      // Remove previous selection
+      document.querySelectorAll('.calendar-days div.selected').forEach(el => {
+        el.classList.remove('selected');
+      });
+      
+      // Add selection to clicked day
+      day.classList.add('selected');
+      
+      // Show day details (will show "No work sessions" if empty)
+      showDayDetails(workDate, dayWorkSessions);
+    });
+    
+    calendarDays.appendChild(day);
+  }
+}
+
+function showDayDetails(date, sessions) {
+  const selectedDateEl = document.getElementById('selected-date');
+  const dayWorkSessionsEl = document.getElementById('day-work-sessions');
+  
+  // Format date nicely (e.g., "January 15, 2023")
+  const formattedDate = new Date(date).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+  
+  selectedDateEl.textContent = formattedDate;
+  dayWorkSessionsEl.innerHTML = ''; // Clear previous sessions
+  
+  if (sessions.length === 0) {
+    dayWorkSessionsEl.innerHTML = '<p>No work sessions recorded for this day</p>';
+    return;
+  }
+  
+  // Calculate totals for the day
+  const totalDuration = sessions.reduce((sum, session) => sum + session.duration, 0);
+  const totalEarnings = ((totalDuration / (1000 * 60 * 60)) * hourlyRate);
+  
+  // Add summary
+  const summaryEl = document.createElement('div');
+  summaryEl.className = 'work-session-item summary';
+  summaryEl.innerHTML = `
+    <strong>Total:</strong>
+    <span>${formatHours(totalDuration)} hours</span>
+    <span>${totalEarnings.toFixed(2)}€</span>
+  `;
+  dayWorkSessionsEl.appendChild(summaryEl);
+  
+  // Add each work session
+  sessions.forEach((session, index) => {
+    const sessionEl = document.createElement('div');
+    sessionEl.className = 'work-session-item';
+    
+    const duration = formatHours(session.duration);
+    const earnings = ((session.duration / (1000 * 60 * 60)) * hourlyRate.toFixed(2));
+    
+    sessionEl.innerHTML = `
+      <span>Session ${index + 1}: ${duration} hours</span>
+      <span>${earnings}€</span>
+    `;
+    
+    dayWorkSessionsEl.appendChild(sessionEl);
+  });
+}
+
+// Event listeners for month navigation
+prevMonthBtn.addEventListener('click', () => {
+  currentDate.setMonth(currentDate.getMonth() - 1);
+  renderCalendar();
+});
+
+nextMonthBtn.addEventListener('click', () => {
+  currentDate.setMonth(currentDate.getMonth() + 1);
+  renderCalendar();
+});
+
+// Initialize calendar
+renderCalendar();
 
 // Initialize the app
 init();
