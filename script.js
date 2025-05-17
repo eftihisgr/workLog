@@ -27,7 +27,9 @@ function init() {
     loadData();
     updateStats();
     renderHistory();
-    renderCalendar(); // Add this line
+    renderCalendar();
+    renderWeeklyChart();  // New
+    renderMonthlyChart(); // New
     hourlyRateInput.value = hourlyRate;
 }
 
@@ -51,7 +53,6 @@ function stopTimer() {
     timerBtn.textContent = 'Start Work';
     timerBtn.classList.remove('running');
     
-    // Save the work session
     saveWorkSession();
 }
 
@@ -60,6 +61,8 @@ function deleteWorkSession(index) {
     saveData();
     updateStats();
     renderHistory();
+    renderWeeklyChart();  // New
+    renderMonthlyChart(); // New
 }
 
 function resetAllData() {
@@ -69,15 +72,15 @@ function resetAllData() {
         isRunning = false;
         clearInterval(timerInterval);
         
-        // Reset timer display
         timerDisplay.textContent = '00:00:00';
         timerBtn.textContent = 'Start Work';
         timerBtn.classList.remove('running');
         
-        // Save empty data and update UI
         saveData();
         updateStats();
         renderHistory();
+        renderWeeklyChart();  // New
+        renderMonthlyChart(); // New
     }
 }
 
@@ -85,8 +88,6 @@ function updateTimer() {
     const currentTime = new Date().getTime();
     elapsedTime = currentTime - startTime;
     timerDisplay.textContent = formatTime(elapsedTime);
-    
-    // Update stats in real-time
     updateStats();
 }
 
@@ -157,14 +158,15 @@ function saveWorkSession() {
     saveData();
     updateStats();
     renderHistory();
-    renderCalendar(); // Add this to update calendar highlights
+    renderCalendar();
+    renderWeeklyChart();  // New
+    renderMonthlyChart(); // New
 }
 
 function renderHistory() {
     historyTable.innerHTML = '';
     
     workSessions.slice().reverse().forEach((session, index) => {
-        // We need to calculate the original index since we're reversing the array
         const originalIndex = workSessions.length - 1 - index;
         
         const row = historyTable.insertRow();
@@ -177,13 +179,117 @@ function renderHistory() {
         durationCell.textContent = `${formatHours(session.duration)} hours`;
         earningsCell.textContent = `${((session.duration / (1000 * 60 * 60)) * hourlyRate).toFixed(2)}€`;
         
-        // Create delete button
         const deleteBtn = document.createElement('button');
-        deleteBtn.textContent = '×'; // Using multiplication symbol which looks like an X
+        deleteBtn.textContent = '×';
         deleteBtn.className = 'delete-btn';
         deleteBtn.addEventListener('click', () => deleteWorkSession(originalIndex));
         deleteCell.appendChild(deleteBtn);
     });
+}
+
+// Chart.js Functions
+function renderWeeklyChart() {
+  const ctx = document.getElementById('weeklyChart');
+  const now = new Date();
+  const weekStart = new Date(now.setDate(now.getDate() - now.getDay()));
+  
+  const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const weeklyHours = Array(7).fill(0);
+  const weeklyEarnings = Array(7).fill(0);
+
+  workSessions.forEach(session => {
+    const sessionDate = new Date(session.date);
+    if (sessionDate >= weekStart) {
+      const dayOfWeek = sessionDate.getDay();
+      weeklyHours[dayOfWeek] += session.duration;
+      weeklyEarnings[dayOfWeek] += (session.duration / (1000 * 60 * 60)) * hourlyRate;
+    }
+  });
+
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: weekDays,
+      datasets: [
+        {
+          label: 'Hours',
+          data: weeklyHours.map(ms => (ms / (1000 * 60 * 60)).toFixed(1)),
+          backgroundColor: 'rgba(212, 175, 55, 0.7)',
+          borderColor: 'rgba(212, 175, 55, 1)',
+          borderWidth: 1
+        },
+        {
+          label: 'Earnings (€)',
+          data: weeklyEarnings.map(amt => amt.toFixed(2)),
+          backgroundColor: 'rgba(76, 175, 80, 0.7)',
+          borderColor: 'rgba(76, 175, 80, 1)',
+          borderWidth: 1
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      scales: {
+        y: {
+          beginAtZero: true,
+          title: { display: true, text: 'Hours / Earnings' }
+        }
+      }
+    }
+  });
+}
+
+function renderMonthlyChart() {
+  const ctx = document.getElementById('monthlyChart');
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  
+  const monthlyHours = Array(daysInMonth).fill(0);
+  const monthlyEarnings = Array(daysInMonth).fill(0);
+
+  workSessions.forEach(session => {
+    const sessionDate = new Date(session.date);
+    if (sessionDate >= monthStart && sessionDate.getMonth() === now.getMonth()) {
+      const dayOfMonth = sessionDate.getDate() - 1;
+      monthlyHours[dayOfMonth] += session.duration;
+      monthlyEarnings[dayOfMonth] += (session.duration / (1000 * 60 * 60)) * hourlyRate;
+    }
+  });
+
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: Array.from({length: daysInMonth}, (_, i) => i + 1),
+      datasets: [
+        {
+          label: 'Hours',
+          data: monthlyHours.map(ms => (ms / (1000 * 60 * 60)).toFixed(1)),
+          borderColor: 'rgba(212, 175, 55, 1)',
+          backgroundColor: 'rgba(212, 175, 55, 0.1)',
+          tension: 0.3,
+          fill: true
+        },
+        {
+          label: 'Earnings (€)',
+          data: monthlyEarnings.map(amt => amt.toFixed(2)),
+          borderColor: 'rgba(76, 175, 80, 1)',
+          backgroundColor: 'rgba(76, 175, 80, 0.1)',
+          tension: 0.3,
+          fill: true
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      scales: {
+        y: {
+          beginAtZero: true,
+          title: { display: true, text: 'Hours / Earnings' }
+        }
+      }
+    }
+  });
 }
 
 // Data persistence
@@ -204,111 +310,50 @@ function loadData() {
     }
 }
 
-// Event listeners
-document.getElementById('reset-all').addEventListener('click', resetAllData);
-
-timerBtn.addEventListener('click', () => {
-    if (isRunning) {
-        stopTimer();
-    } else {
-        startTimer();
-    }
-});
-
-settingsBtn.addEventListener('click', () => {
-    settingsModal.style.display = 'block';
-});
-
-closeBtn.addEventListener('click', () => {
-    settingsModal.style.display = 'none';
-});
-
-saveSettingsBtn.addEventListener('click', () => {
-    hourlyRate = parseFloat(hourlyRateInput.value) || 0;
-    saveData();
-    updateStats();
-    renderHistory();
-    settingsModal.style.display = 'none';
-});
-
-window.addEventListener('click', (event) => {
-    if (event.target === settingsModal) {
-        settingsModal.style.display = 'none';
-    }
-});
-
 // Calendar functionality
 const prevMonthBtn = document.getElementById('prev-month');
 const nextMonthBtn = document.getElementById('next-month');
 const currentMonthEl = document.getElementById('current-month');
 const calendarDays = document.getElementById('calendar-days');
-
 let currentDate = new Date();
 
 function renderCalendar() {
-  // Clear previous days
   calendarDays.innerHTML = '';
-  
-  // Set month/year header
   currentMonthEl.textContent = new Intl.DateTimeFormat('en-US', { 
     month: 'long', 
     year: 'numeric' 
   }).format(currentDate);
   
-  // Get first day of month and total days
-  const firstDay = new Date(
-    currentDate.getFullYear(), 
-    currentDate.getMonth(), 
-    1
-  ).getDay();
-  
-  const daysInMonth = new Date(
-    currentDate.getFullYear(), 
-    currentDate.getMonth() + 1, 
-    0
-  ).getDate();
-  
-  // Get today's date for highlighting
+  const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
+  const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
   const today = new Date();
   const isCurrentMonth = currentDate.getMonth() === today.getMonth() && 
                         currentDate.getFullYear() === today.getFullYear();
-  
-  // Add empty cells for days before first day of month
+
   for (let i = 0; i < firstDay; i++) {
-    const emptyDay = document.createElement('div');
-    calendarDays.appendChild(emptyDay);
+    calendarDays.appendChild(document.createElement('div'));
   }
-  
-  // Add days of month
+
   for (let i = 1; i <= daysInMonth; i++) {
     const day = document.createElement('div');
     day.textContent = i;
     
-    // Highlight today
     if (isCurrentMonth && i === today.getDate()) {
       day.classList.add('today');
     }
     
-    // Format date to match your work sessions (YYYY-MM-DD)
     const workDate = `${currentDate.getFullYear()}-${(currentDate.getMonth()+1).toString().padStart(2, '0')}-${i.toString().padStart(2, '0')}`;
     const dayWorkSessions = workSessions.filter(session => session.date === workDate);
     
-    // Add work-day class if there are sessions
     if (dayWorkSessions.length > 0) {
       day.classList.add('work-day');
     }
     
-    // Add click handler to ALL days (not just work days)
     day.addEventListener('click', () => {
-      // Remove previous selection
       document.querySelectorAll('.calendar-days div.selected').forEach(el => {
         el.classList.remove('selected');
       });
-      
-      // Add selection to clicked day
       day.classList.add('selected');
-      
-      // Show day details (will show "No work sessions" if empty)
       showDayDetails(workDate, dayWorkSessions);
     });
     
@@ -320,26 +365,22 @@ function showDayDetails(date, sessions) {
   const selectedDateEl = document.getElementById('selected-date');
   const dayWorkSessionsEl = document.getElementById('day-work-sessions');
   
-  // Format date nicely (e.g., "January 15, 2023")
-  const formattedDate = new Date(date).toLocaleDateString('en-US', {
+  selectedDateEl.textContent = new Date(date).toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',
     day: 'numeric'
   });
   
-  selectedDateEl.textContent = formattedDate;
-  dayWorkSessionsEl.innerHTML = ''; // Clear previous sessions
+  dayWorkSessionsEl.innerHTML = '';
   
   if (sessions.length === 0) {
-    dayWorkSessionsEl.innerHTML = '<p>No work sessions recorded for this day</p>';
+    dayWorkSessionsEl.innerHTML = '<p>No work sessions recorded</p>';
     return;
   }
   
-  // Calculate totals for the day
   const totalDuration = sessions.reduce((sum, session) => sum + session.duration, 0);
   const totalEarnings = ((totalDuration / (1000 * 60 * 60)) * hourlyRate);
   
-  // Add summary
   const summaryEl = document.createElement('div');
   summaryEl.className = 'work-session-item summary';
   summaryEl.innerHTML = `
@@ -349,36 +390,41 @@ function showDayDetails(date, sessions) {
   `;
   dayWorkSessionsEl.appendChild(summaryEl);
   
-  // Add each work session
   sessions.forEach((session, index) => {
     const sessionEl = document.createElement('div');
     sessionEl.className = 'work-session-item';
-    
-    const duration = formatHours(session.duration);
     const earnings = ((session.duration / (1000 * 60 * 60)) * hourlyRate.toFixed(2));
-    
     sessionEl.innerHTML = `
-      <span>Session ${index + 1}: ${duration} hours</span>
+      <span>Session ${index + 1}: ${formatHours(session.duration)} hours</span>
       <span>${earnings}€</span>
     `;
-    
     dayWorkSessionsEl.appendChild(sessionEl);
   });
 }
 
-// Event listeners for month navigation
+// Event Listeners
+document.getElementById('reset-all').addEventListener('click', resetAllData);
+timerBtn.addEventListener('click', () => isRunning ? stopTimer() : startTimer());
+settingsBtn.addEventListener('click', () => settingsModal.style.display = 'block');
+closeBtn.addEventListener('click', () => settingsModal.style.display = 'none');
+saveSettingsBtn.addEventListener('click', () => {
+  hourlyRate = parseFloat(hourlyRateInput.value) || 0;
+  saveData();
+  updateStats();
+  renderHistory();
+  renderWeeklyChart();
+  renderMonthlyChart();
+  settingsModal.style.display = 'none';
+});
+window.addEventListener('click', (e) => e.target === settingsModal && (settingsModal.style.display = 'none'));
 prevMonthBtn.addEventListener('click', () => {
   currentDate.setMonth(currentDate.getMonth() - 1);
   renderCalendar();
 });
-
 nextMonthBtn.addEventListener('click', () => {
   currentDate.setMonth(currentDate.getMonth() + 1);
   renderCalendar();
 });
 
-// Initialize calendar
-renderCalendar();
-
-// Initialize the app
+// Initialize
 init();
